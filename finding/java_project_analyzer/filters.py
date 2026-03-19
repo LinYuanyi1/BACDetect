@@ -15,6 +15,8 @@ def filter_analysis(
     annotation_filters: set[str] | None,
     methods_only: bool,
 ) -> list[FileAnalysis]:
+    # An Filter in order to filter the result based on the provided args.
+    # If no annotation filters are specified and methods_only is not set, return the original analysis.
     if annotation_filters is None and not methods_only:
         return analyses
 
