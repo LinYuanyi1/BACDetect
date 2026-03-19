@@ -25,6 +25,8 @@ from java_project_analyzer.models import AuthEvidence, AuthFinding, ClassInfo, F
 
 @dataclass
 class _DetectionState:
+    # 数据类，表示认证授权检测的状态，包括方法信息、各类信号的分数、证据列表和已见过的 Fact 集合
+    # 用于记录单个方法的检测状态，累积不同类型的信号分数，并存储相关证据以供后续分析和输出
     method: MethodInfo
     category_scores: Counter[str] = field(default_factory=Counter)
     evidences: list[AuthEvidence] = field(default_factory=list)
@@ -62,7 +64,7 @@ class _DetectionState:
         ]
 
 
-def locate_auth_findings(
+def locate_auth_findings(#
     analyses: list[FileAnalysis],
     min_score: int = DEFAULT_AUTH_MIN_SCORE,
 ) -> list[AuthFinding]:
@@ -78,7 +80,9 @@ def locate_auth_findings(
         )
 
         for class_info in file_info.classes:
+            # 递归分析单个文件内部类
             for method_info in class_info.methods:
+                # 递归分析单个类内部方法
                 state = _detect_method(
                     file_info=file_info,
                     class_info=class_info,
@@ -124,6 +128,7 @@ def locate_auth_findings(
 
 
 def _detect_method(
+    # 检测单个方法是否包含认证授权逻辑，返回检测状态对象
     file_info: FileAnalysis,
     class_info: ClassInfo,
     method_info: MethodInfo,
@@ -133,25 +138,41 @@ def _detect_method(
     # instead of requiring a single exact framework pattern.
     state = _DetectionState(method=method_info)
 
+    # judge if the method is a web endpoint by checking its annotations and its class annotations
     is_endpoint = _is_endpoint(class_info, method_info)
+    # judge if the method is a security configuration
+    # 即获取类的继承和实现的名字，如 extend xxx 获得的是 xxx
     class_component_types = _security_component_types(class_info)
+    # judge if the method returns a common security framework type.
     method_return_type = _base_type_name(method_info.return_type)
+    # 判断方法是否具有安全配置的特征：所在类被@Configuration注解标记，方法被@Bean注解标记，并且方法返回一个常见的安全组件类型。这些条件结合在一起可以较为准确地识别出Spring Security等框架中的安全配置方法。
+    # 但是否会漏报一些不符合这些条件但仍然是安全配置的方法，或者误报一些偶然满足这些条件但实际上与安全配置无关的方法，则取决于项目的具体代码风格和使用的框架特征。
+    # 还需要考虑是否满足要求 ！！！！！！
     is_security_config = (
         "Configuration" in class_info.annotations
         and "Bean" in method_info.annotations
         and method_return_type in SECURITY_CONFIG_RETURN_TYPES
     )
 
+    # 添加注解可信度，根据注解判断是否与鉴权相关
     _add_annotation_signals(state, class_info, method_info, is_endpoint)
+    # 添加方法和类名关键词可信度，根据关键词来添加部分置信度
     _add_name_signals(state, class_info, method_info)
+    # 添加框架相关类型和方法的可信度
     _add_framework_signals(state, class_info, method_info, class_component_types)
+    # 添加调用、异常、字符串字面量、类型引用等多种信号的可信度
     _add_call_signals(state, method_info)
+    # 添加方法声明的异常类型信号的可信度
     _add_exception_signals(state, method_info)
+    # 添加字符串字面量信号的可信度
     _add_literal_signals(state, method_info)
+    # 添加类型引用信号的可信度
     _add_type_reference_signals(state, method_info)
+    # 添加安全配置相关信号的可信度
     _add_security_config_signals(state, class_info, method_info, is_security_config)
 
     if has_security_imports and state.score > 0:
+        # 文件导入了安全相关的库，并且方法有其他安全信号，那么导入本身也增加一点可信度，帮助区分安全相关代码和偶尔使用了安全相关词的普通代码。
         state.add(
             category="security_logic",
             kind="import",
@@ -413,6 +434,7 @@ def _is_endpoint(class_info: ClassInfo, method_info: MethodInfo) -> bool:
 
 
 def _security_component_types(class_info: ClassInfo) -> list[str]:
+    # get the base name of all extended and implemented types.
     matched: list[str] = []
     for type_name in [*class_info.extends_types, *class_info.implements_types]:
         base_name = _base_type_name(type_name)
@@ -427,6 +449,7 @@ def _base_type_name(type_name: str) -> str:
 
 
 def _build_signature(file_info: FileAnalysis, class_info: ClassInfo, method_info: MethodInfo) -> str:
+    # return a signature string like "com.example.MyClass#myMethod(2)" for a method with 2 parameters.
     package_prefix = f"{file_info.package}." if file_info.package else ""
     return f"{package_prefix}{class_info.name}#{method_info.name}({len(method_info.parameters)})"
 
