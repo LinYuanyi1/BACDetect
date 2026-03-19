@@ -16,15 +16,17 @@ from java_project_analyzer.models import (
 from java_project_analyzer.tree_utils import (
     ANNOTATION_NODE_TYPES,
     TYPE_NODE_CANDIDATES,
+    TYPE_REFERENCE_NODE_TYPES,
     first_child,
     first_child_of_types,
     text_of,
+    unique_texts,
     walk_descendants,
 )
 
 
 class JavaProjectAnalyzer:
-    """Analyze Java source files and extract classes, methods, annotations, and calls."""
+    """Analyze Java source files and extract facts useful for security analysis."""
 
     def __init__(self) -> None:
         self._parser = create_java_parser()
@@ -33,9 +35,7 @@ class JavaProjectAnalyzer:
         return [self.analyze_file(path) for path in self.iter_java_files(project_root)]
 
     def analyze_file(self, java_file: Path) -> FileAnalysis:
-        """Analyze a single Java file and extract its package, imports, classes, methods, annotations, and method calls information.
-        """
-        
+        """Analyze a single Java file and extract the structure tree we care about."""
         source = java_file.read_bytes()
         tree = self._parser.parse(source)
         root = tree.root_node
@@ -44,6 +44,8 @@ class JavaProjectAnalyzer:
         imports: list[str] = []
         classes: list[ClassInfo] = []
 
+        # Only the top-level declarations are needed here; deeper traversal
+        # happens inside the class and method parsers below.
         for child in root.children:
             if child.type == "package_declaration":
                 package_name = self._extract_package_name(child, source)
@@ -86,6 +88,8 @@ class JavaProjectAnalyzer:
         name_node = class_node.child_by_field_name("name") or first_child(class_node, "identifier")
         body_node = first_child(class_node, "class_body")
 
+        # The analyzer keeps only structure that is later useful for auth rules:
+        # class hierarchy, fields, and method-level facts.
         fields: list[FieldInfo] = []
         methods: list[MethodInfo] = []
         if body_node is not None:
@@ -101,6 +105,8 @@ class JavaProjectAnalyzer:
             kind=class_node.type.replace("_declaration", ""),
             modifiers=self._extract_modifiers(modifiers_node, source),
             annotations=self._extract_annotations(modifiers_node, source),
+            extends_types=self._extract_inherited_types(class_node, source),
+            implements_types=self._extract_implemented_types(class_node, source),
             fields=fields,
             methods=methods,
         )
@@ -133,8 +139,11 @@ class JavaProjectAnalyzer:
         )
         name_node = method_node.child_by_field_name("name") or first_child(method_node, "identifier")
         params_node = first_child(method_node, "formal_parameters")
+        throws_node = first_child(method_node, "throws")
         body_node = first_child(method_node, "block")
 
+        # Besides the visible signature, we also persist lightweight body facts
+        # that later drive auth heuristics: calls, exceptions, literals, types.
         return MethodInfo(
             name=text_of(name_node, source) if name_node is not None else "<unknown>",
             line=method_node.start_point[0] + 1,
@@ -145,11 +154,15 @@ class JavaProjectAnalyzer:
             modifiers=self._extract_modifiers(modifiers_node, source),
             annotations=self._extract_annotations(modifiers_node, source),
             calls=self._extract_method_calls(body_node, source),
+            thrown_exceptions=self._extract_method_exceptions(throws_node, body_node, source),
+            string_literals=self._extract_string_literals(body_node, source),
+            type_references=self._extract_type_references(body_node, source),
         )
 
     def _extract_parameters(self, params_node: Node | None, source: bytes) -> list[str]:
         if params_node is None:
             return []
+
         parameters: list[str] = []
         for child in params_node.children:
             if child.type == "formal_parameter":
@@ -165,8 +178,8 @@ class JavaProjectAnalyzer:
             if node.type != "method_invocation":
                 continue
 
-            # Different Java grammar nodes do not always expose field names uniformly,
-            # so keep a conservative fallback to the whole invocation text.
+            # The Java grammar is not fully uniform across invocation shapes,
+            # so keep the fallback to the full invocation text when needed.
             name_node = node.child_by_field_name("name")
             object_node = node.child_by_field_name("object")
             calls.append(
@@ -177,6 +190,49 @@ class JavaProjectAnalyzer:
                 )
             )
         return calls
+
+    def _extract_method_exceptions(
+        self,
+        throws_node: Node | None,
+        block_node: Node | None,
+        source: bytes,
+    ) -> list[str]:
+        # Combine declared exceptions and explicit throw sites so downstream rules
+        # can detect both API-level and in-body access denial patterns.
+        declared = self._extract_type_names(throws_node, source)
+        thrown: list[str] = []
+        if block_node is not None:
+            for node in walk_descendants(block_node):
+                if node.type != "throw_statement":
+                    continue
+                creation = first_child(node, "object_creation_expression")
+                if creation is not None:
+                    thrown.extend(self._extract_type_names(creation, source))
+        return unique_texts([*declared, *thrown])
+
+    def _extract_string_literals(self, block_node: Node | None, source: bytes) -> list[str]:
+        if block_node is None:
+            return []
+
+        literals: list[str] = []
+        for node in walk_descendants(block_node):
+            if node.type != "string_literal":
+                continue
+            literal = text_of(node, source).strip()
+            if literal.startswith('"') and literal.endswith('"') and len(literal) >= 2:
+                literal = literal[1:-1]
+            literals.append(literal)
+        return unique_texts(literals)
+
+    def _extract_type_references(self, block_node: Node | None, source: bytes) -> list[str]:
+        if block_node is None:
+            return []
+
+        type_names: list[str] = []
+        for node in walk_descendants(block_node):
+            if node.type in TYPE_REFERENCE_NODE_TYPES:
+                type_names.append(text_of(node, source))
+        return unique_texts(type_names)
 
     def _extract_annotations(self, modifiers_node: Node | None, source: bytes) -> list[str]:
         if modifiers_node is None:
@@ -210,6 +266,31 @@ class JavaProjectAnalyzer:
             return text_of(annotation_node, source).lstrip("@")
 
         return text_of(name_node, source).split(".")[-1]
+
+    def _extract_inherited_types(self, class_node: Node, source: bytes) -> list[str]:
+        return self._extract_type_names(first_child(class_node, "superclass"), source)
+
+    def _extract_implemented_types(self, class_node: Node, source: bytes) -> list[str]:
+        implemented_types: list[str] = []
+        # Tree-sitter uses different node labels for different declaration forms,
+        # so we probe the common variants instead of assuming a single one.
+        for child_type in ("super_interfaces", "interfaces", "extends_interfaces"):
+            implemented_types.extend(self._extract_type_names(first_child(class_node, child_type), source))
+        return unique_texts(implemented_types)
+
+    def _extract_type_names(self, node: Node | None, source: bytes) -> list[str]:
+        if node is None:
+            return []
+
+        type_names: list[str] = []
+        # Nested generic and scoped types appear as multiple AST nodes; collect
+        # all of them first, then de-duplicate while keeping the original order.
+        for child in walk_descendants(node):
+            if child.type in TYPE_REFERENCE_NODE_TYPES:
+                type_names.append(text_of(child, source))
+        if node.type in TYPE_REFERENCE_NODE_TYPES:
+            type_names.insert(0, text_of(node, source))
+        return unique_texts(type_names)
 
     @staticmethod
     def _find_named_child(node: Node, node_types: set[str]) -> Node | None:

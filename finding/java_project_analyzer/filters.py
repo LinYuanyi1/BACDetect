@@ -6,6 +6,7 @@ from java_project_analyzer.models import ClassInfo, FileAnalysis
 
 
 def has_target_annotation(annotations: Iterable[str], targets: set[str]) -> bool:
+    # return True if any annotation in the target, otherwise False.
     return any(annotation in targets for annotation in annotations)
 
 
@@ -47,6 +48,8 @@ def filter_analysis(
                         kind=class_info.kind,
                         modifiers=class_info.modifiers,
                         annotations=class_info.annotations,
+                        extends_types=class_info.extends_types,
+                        implements_types=class_info.implements_types,
                         fields=class_info.fields,
                         methods=matched_methods,
                     )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from java_project_analyzer.models import FileAnalysis
+from java_project_analyzer.models import AuthFinding, FileAnalysis
 
 
 def render_text(analyses: list[FileAnalysis]) -> str:
@@ -59,6 +59,36 @@ def render_text(analyses: list[FileAnalysis]) -> str:
 def render_json(analyses: list[FileAnalysis]) -> str:
     return json.dumps(
         [asdict(file_info) for file_info in analyses],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+def render_auth_findings_text(findings: list[AuthFinding]) -> str:
+    if not findings:
+        return "No common authorization or authentication logic was detected."
+
+    lines: list[str] = []
+    for finding in findings:
+        lines.append(">>>>" + "-" * 20 + "AUTH Finding" + "-" * 20 + "<<<<")
+        lines.append(f"[+] Category: {finding.category} | Score: {finding.score}")
+        lines.append(f"    Signature: {finding.signature}")
+        lines.append(f"    Location : {finding.path}:{finding.line}")
+        if finding.tags:
+            lines.append(f"    Tags     : {', '.join(finding.tags)}")
+        lines.append("    Evidence :")
+        for evidence in finding.evidences:
+            line_suffix = f" line {evidence.line}" if evidence.line is not None else ""
+            lines.append(
+                f"      - [+{evidence.weight}] {evidence.kind}: {evidence.detail}{line_suffix}"
+            )
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def render_auth_findings_json(findings: list[AuthFinding]) -> str:
+    return json.dumps(
+        [asdict(finding) for finding in findings],
         ensure_ascii=False,
         indent=2,
     )
