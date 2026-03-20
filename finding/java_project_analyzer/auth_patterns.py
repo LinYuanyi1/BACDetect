@@ -200,3 +200,100 @@ SECURITY_IMPORT_KEYWORDS = (
     "apache.shiro",
     "springframework.security",
 )
+
+AOP_IMPORT_KEYWORDS = (
+    "aspectj",
+    "spring.aop",
+)
+
+AOP_CLASS_ANNOTATIONS = {
+    "Aspect",
+}
+
+AOP_ADVICE_ANNOTATIONS = {
+    "After",
+    "AfterReturning",
+    "AfterThrowing",
+    "Around",
+    "Before",
+    "Pointcut",
+}
+
+AOP_JOINPOINT_TYPES = {
+    "JoinPoint",
+    "ProceedingJoinPoint",
+}
+
+AOP_POINTCUT_REFERENCE_BLACKLIST = {
+    "args",
+    "bean",
+    "call",
+    "execution",
+    "target",
+    "this",
+    "within",
+}
+
+AOP_SECURITY_KEYWORDS = {
+    "access",
+    "admin",
+    "auth",
+    "authorize",
+    "jwt",
+    "login",
+    "permission",
+    "role",
+    "security",
+    "token",
+}
+
+INLINE_AUTH_IDENTIFIER_KEYWORDS = {
+    "auth",
+    "bearer",
+    "currentuser",
+    "jwt",
+    "login",
+    "loginuser",
+    "owner",
+    "permission",
+    "principal",
+    "role",
+    "roleid",
+    "subject",
+    "tenant",
+    "token",
+    "user",
+    "userid",
+}
+
+INLINE_AUTH_CALL_KEYWORDS = {
+    "getheader",
+    "getprincipal",
+    "getsubject",
+    "hasrole",
+    "hasauthority",
+    "haspermission",
+    "checkpermission",
+    "checksuperpermission",
+    "verifytoken",
+    "validatetoken",
+    "parsetoken",
+}
+
+INLINE_DENY_ACTION_KEYWORDS = {
+    "accessdenied",
+    "badargument",
+    "forbidden",
+    "senderror",
+    "unauthorized",
+    "unlogin",
+}
+
+INLINE_DENY_RETURN_TEXT_KEYWORDS = {
+    "403",
+    "false",
+    "forbidden",
+    "null",
+    "unauthorized",
+    "unlogin",
+}

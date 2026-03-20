@@ -40,7 +40,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--locate-auth",
         action="store_true",
-        help="Locate common Java authorization and authentication logic",
+        help="Locate concrete Java authorization and authentication implementation points",
     )
     parser.add_argument(
         "--min-score",
@@ -75,8 +75,8 @@ def main() -> None:
     analyzer = JavaProjectAnalyzer()
     analyses = analyzer.analyze_project(project_root)
     if args.locate_auth:
-        # Auth-location mode consumes the same AST facts, but runs a separate
-        # scoring pipeline instead of the simpler annotation filter.
+        # Auth-location mode consumes the same AST facts, then keeps concrete
+        # implementation points instead of merely listing protected endpoints.
         findings = locate_auth_findings(analyses=analyses, min_score=args.min_score)
         print(render_auth_findings_json(findings) if args.json else render_auth_findings_text(findings))
         return

@@ -68,9 +68,11 @@ def render_auth_findings_text(findings: list[AuthFinding]) -> str:
     if not findings:
         return "No common authorization or authentication logic was detected."
 
+    sequence = 0
     lines: list[str] = []
     for finding in findings:
-        lines.append(">>>>" + "-" * 20 + "AUTH Finding" + "-" * 20 + "<<<<")
+        sequence += 1
+        lines.append(">>>>" + "-" * 20 + "AUTH Finding" + f"{sequence}" + "-" * 20 + "<<<<")
         lines.append(f"[+] Category: {finding.category} | Score: {finding.score}")
         lines.append(f"    Signature: {finding.signature}")
         lines.append(f"    Location : {finding.path}:{finding.line}")
@@ -83,6 +85,8 @@ def render_auth_findings_text(findings: list[AuthFinding]) -> str:
                 f"      - [+{evidence.weight}] {evidence.kind}: {evidence.detail}{line_suffix}"
             )
         lines.append("")
+        
+    lines.append(f"Total {len(findings)} findings.")
     return "\n".join(lines).rstrip()
 
 

@@ -50,6 +50,7 @@ def filter_analysis(
                         kind=class_info.kind,
                         modifiers=class_info.modifiers,
                         annotations=class_info.annotations,
+                        annotation_infos=class_info.annotation_infos,
                         extends_types=class_info.extends_types,
                         implements_types=class_info.implements_types,
                         fields=class_info.fields,

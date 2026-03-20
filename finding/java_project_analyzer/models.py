@@ -4,10 +4,37 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class AnnotationInfo:
+    name: str
+    line: int
+    raw_text: str
+    argument_text: str | None = None
+
+
+@dataclass
 class MethodCallInfo:
     name: str
     line: int
     receiver: str | None = None
+
+
+@dataclass
+class BranchActionInfo:
+    kind: str
+    detail: str
+    line: int
+
+
+@dataclass
+class IfStatementInfo:
+    line: int
+    condition_text: str
+    identifiers: list[str] = field(default_factory=list)
+    method_calls: list[str] = field(default_factory=list)
+    string_literals: list[str] = field(default_factory=list)
+    comparison_ops: list[str] = field(default_factory=list)
+    branch_actions: list[BranchActionInfo] = field(default_factory=list)
+    else_branch_actions: list[BranchActionInfo] = field(default_factory=list)
 
 
 @dataclass
@@ -18,10 +45,12 @@ class MethodInfo:
     parameters: list[str] = field(default_factory=list)
     modifiers: list[str] = field(default_factory=list)
     annotations: list[str] = field(default_factory=list)
+    annotation_infos: list[AnnotationInfo] = field(default_factory=list)
     calls: list[MethodCallInfo] = field(default_factory=list)
     thrown_exceptions: list[str] = field(default_factory=list)
     string_literals: list[str] = field(default_factory=list)
     type_references: list[str] = field(default_factory=list)
+    if_statements: list[IfStatementInfo] = field(default_factory=list)
 
 
 @dataclass
@@ -40,6 +69,7 @@ class ClassInfo:
     kind: str
     modifiers: list[str] = field(default_factory=list)
     annotations: list[str] = field(default_factory=list)
+    annotation_infos: list[AnnotationInfo] = field(default_factory=list)
     extends_types: list[str] = field(default_factory=list)
     implements_types: list[str] = field(default_factory=list)
     fields: list[FieldInfo] = field(default_factory=list)
